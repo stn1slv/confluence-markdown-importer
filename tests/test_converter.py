@@ -219,6 +219,12 @@ class TestLinks:
 
         assert '<a href="https://example.com/x">site</a>' in result.storage
 
+    def test_anchor_without_href_is_left_untouched(self):
+        result = convert('Jump target: <a name="section-1"></a> here.\n')
+
+        assert '<a name="section-1"' in result.storage
+        assert result.warnings == []
+
     def test_site_relative_link_is_kept_as_anchor(self):
         result = convert("[John Doe](/wiki/display/~6171624a860f78006bd5629c)\n", strip_breadcrumbs=False)
 

@@ -223,6 +223,9 @@ def _convert_links(root: etree._Element, export_path: str, resolve_page: PageRes
     """Turn relative links to exported .md files into Confluence page links."""
     for anchor in list(root.iter("a")):
         href = anchor.get("href") or ""
+        # No href (e.g. a raw-HTML <a name="..."> jump target) — not a link, leave untouched.
+        if not href:
+            continue
         parsed = urlsplit(href)
         # Absolute, site-relative (/wiki/...), and same-page anchors are kept as plain <a>.
         if parsed.scheme or href.startswith(("#", "/")):
