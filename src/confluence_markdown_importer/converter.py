@@ -86,7 +86,9 @@ def convert_markdown(
 ) -> ConversionResult:
     """Convert exported markdown back to Confluence storage format."""
     warnings: list[str] = []
-    body_md, title = _strip_preamble(text, strip_title=strip_title, strip_breadcrumbs=strip_breadcrumbs)
+    body_md, title = _strip_preamble(
+        text, strip_title=strip_title, strip_breadcrumbs=strip_breadcrumbs, warnings=warnings
+    )
 
     html = _markdown_parser().render(body_md)
     root = _to_xml_tree(html)
@@ -103,7 +105,9 @@ def convert_markdown(
     return ConversionResult(title=title, storage=storage, warnings=warnings)
 
 
-def _strip_preamble(text: str, *, strip_title: bool, strip_breadcrumbs: bool) -> tuple[str, str | None]:
+def _strip_preamble(
+    text: str, *, strip_title: bool, strip_breadcrumbs: bool, warnings: list[str]
+) -> tuple[str, str | None]:
     """Remove frontmatter, the breadcrumb line, and the H1 title line."""
     text = _FRONTMATTER_RE.sub("", text, count=1)
     lines = text.split("\n")
@@ -116,13 +120,18 @@ def _strip_preamble(text: str, *, strip_title: bool, strip_breadcrumbs: bool) ->
 
     i = next_content(0)
     if strip_breadcrumbs and i < len(lines) and ".md)" in lines[i] and _BREADCRUMB_RE.match(lines[i]):
-        # A first line made only of links can also be genuine content. When the H1 title is
-        # exported too, a real breadcrumb line is always directly followed by it — require
-        # that, so standalone content links are never stripped by mistake.
+        # A first line made only of links can also be genuine content. A real breadcrumb line
+        # is always directly followed by the exported H1 title, so only strip when that holds.
+        # Without an H1 (include_document_title disabled) it cannot be confirmed — never delete
+        # content on a guess; keep the line and warn instead.
         follower = next_content(i + 1)
-        is_breadcrumb = not strip_title or (follower < len(lines) and _H1_RE.match(lines[follower]) is not None)
-        if is_breadcrumb:
+        if strip_title and follower < len(lines) and _H1_RE.match(lines[follower]) is not None:
             del lines[i]
+        elif not strip_title:
+            warnings.append(
+                "First line looks like an exporter breadcrumb but cannot be confirmed because "
+                "include_document_title is disabled — kept as content"
+            )
 
     title: str | None = None
     i = next_content(i)

@@ -78,6 +78,9 @@ Every generated page body is validated as well-formed XML before it is sent.
   static rendering. Pages with plain text, tables, code, alerts, and links round-trip cleanly.
 - **Unresolvable links degrade to text.** Links to pages outside the exported space (not in the
   lockfile) and links to local attachment files are kept as plain text and reported as warnings.
+- **Requires relative href exports.** `cmi import` refuses to run when the cme config uses
+  `export.page_href` or `export.attachment_href` other than `relative` (the default), because
+  absolute and wiki-style links cannot be converted back.
 - No attachment upload and no comment sync.
 
 ## Development

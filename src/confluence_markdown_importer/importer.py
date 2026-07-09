@@ -216,7 +216,14 @@ def _import_page(
         always_update=True,
         version_comment=VERSION_COMMENT,
     )
-    new_version = _version_from(response, fallback=remote_version + 1)
+    new_version = _version_from(response)
+    if new_version is None:
+        # The SDK can bail out and return None without performing the PUT; treating that as
+        # success would record a version Confluence never reached and desync the baseline.
+        raise ImporterError(
+            f"update_page returned no usable result for page {candidate.page_id} "
+            f"({candidate.export_path}); the page may not have been updated"
+        )
 
     state.set_page(
         candidate.org_url,
@@ -234,10 +241,10 @@ def _import_page(
     return True
 
 
-def _version_from(response: object, fallback: int) -> int:
+def _version_from(response: object) -> int | None:
     if isinstance(response, dict):
         try:
             return int(response["version"]["number"])
         except (KeyError, TypeError, ValueError):
-            return fallback
-    return fallback
+            return None
+    return None

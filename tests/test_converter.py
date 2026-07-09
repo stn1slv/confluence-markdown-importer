@@ -66,13 +66,14 @@ class TestStripping:
         assert "See the index" in result.storage
         assert "<p>Body.</p>" in result.storage
 
-    def test_breadcrumb_without_h1_still_stripped_when_title_stripping_disabled(self):
+    def test_breadcrumb_kept_with_warning_when_title_stripping_disabled(self):
         text = "[Parent](../Parent.md)\n\nBody.\n"
 
         result = convert(text, strip_title=False)
 
-        assert "Parent" not in result.storage
+        assert "Parent" in result.storage
         assert "<p>Body.</p>" in result.storage
+        assert any("breadcrumb" in w for w in result.warnings)
 
 
 class TestBasicBlocks:

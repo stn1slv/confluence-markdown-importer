@@ -82,6 +82,15 @@ def import_(
     """Push locally edited pages back to Confluence (update existing pages only)."""
     _setup_logging()
     settings = get_settings()
+    if settings.export.page_href != "relative" or settings.export.attachment_href != "relative":
+        typer.echo(
+            "Error: cmi only supports exports created with export.page_href=relative and "
+            f"export.attachment_href=relative (current: page_href={settings.export.page_href}, "
+            f"attachment_href={settings.export.attachment_href}). Links and images exported in "
+            "other styles cannot be converted back and would be silently corrupted.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     lock = _load_lock(directory)
     state = ImportState.load(directory / STATE_FILE_NAME)
 

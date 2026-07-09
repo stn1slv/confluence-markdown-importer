@@ -121,6 +121,18 @@ class TestDryRun:
 
 
 class TestFailures:
+    def test_none_update_response_is_failure_not_success(self, export_root, confluence):
+        state = prepare(export_root, "# Systems\n\nEdited.\n")
+        before = state.get_page("42").model_copy()
+        confluence.update_page.return_value = None  # SDK can bail out before the PUT
+
+        outcome = do_import(export_root, state, confluence)
+
+        assert outcome.updated == []
+        assert len(outcome.failed) == 1
+        assert "42" in outcome.failed[0].error
+        assert state.get_page("42") == before
+
     def test_api_error_on_one_page_does_not_block_others(self, export_root, confluence):
         state, _ = build_baseline(export_root, make_lock(export_root))
         (export_root / "Space/Home/Systems.md").write_text("# Systems\n\nEdited A.\n", encoding="utf-8")

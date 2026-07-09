@@ -86,3 +86,15 @@ class TestImport:
 
         assert result.exit_code == 0
         confluence.update_page.assert_not_called()
+
+    @pytest.mark.parametrize("env_key", ["CME_EXPORT__PAGE_HREF", "CME_EXPORT__ATTACHMENT_HREF"])
+    def test_non_relative_href_config_refuses_import(self, export_root, confluence, monkeypatch, env_key):
+        monkeypatch.setenv(env_key, "absolute")
+        runner.invoke(app, ["baseline", str(export_root)])
+        (export_root / "Space/Home/Systems.md").write_text("# Systems\n\nEdited.\n", encoding="utf-8")
+
+        result = runner.invoke(app, ["import", str(export_root)])
+
+        assert result.exit_code != 0
+        assert "relative" in result.output
+        confluence.update_page.assert_not_called()
