@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel, Field
 
-from confluence_markdown_importer.converter import PageTarget, convert_markdown
+from confluence_markdown_importer.converter import PageResolver, PageTarget, convert_markdown
 from confluence_markdown_importer.planner import hash_bytes
 from confluence_markdown_importer.state import ImportState, PageState
 
@@ -34,6 +34,58 @@ class ConfluenceClient(Protocol):
     def get_page_by_id(self, page_id: str, expand: str | None = None) -> dict[str, Any]: ...
     def update_page(self, **kwargs: object) -> dict[str, Any]: ...
     def get_attachments_from_content(self, page_id: str, **kwargs: object) -> dict[str, Any]: ...
+    def get_all_spaces(self, start: int = 0, limit: int = 500, expand: str | None = None) -> dict[str, Any]: ...
+
+
+class ExternalSpaceResolver:
+    """Resolves external space names (directory names) to Confluence space keys."""
+
+    def __init__(self, client_factory: ClientFactory, org_url: str, lock: ConfluenceLock) -> None:
+        self.client_factory = client_factory
+        self.org_url = org_url
+        self.lock = lock
+        self._space_name_to_key: dict[str, str] = {}
+        self._loaded = False
+
+        # Pre-populate from the lockfile to avoid network calls for already exported spaces
+        org = lock.orgs.get(org_url)
+        if org:
+            for space_key, space in org.spaces.items():
+                for entry in space.pages.values():
+                    parts = [p for p in entry.export_path.split("/") if p]
+                    if parts:
+                        self._space_name_to_key[parts[0]] = space_key
+                        break
+
+    def get_space_key(self, space_name: str) -> str | None:
+        if space_name in self._space_name_to_key:
+            return self._space_name_to_key[space_name]
+
+        if not self._loaded:
+            self._loaded = True
+            try:
+                client = self.client_factory(self.org_url)
+                start = 0
+                while True:
+                    res = client.get_all_spaces(start=start, limit=500)
+                    results = res.get("results", []) if isinstance(res, dict) else []
+                    if not results:
+                        break
+                    for space in results:
+                        name = space.get("name")
+                        key = space.get("key")
+                        if name and key:
+                            self._space_name_to_key[name] = key
+                    if len(results) < 500:
+                        break
+                    start += 500
+            except Exception as e:
+                logger.warning(
+                    "Could not fetch spaces from Confluence to map external link for space name '%s': %s",
+                    space_name,
+                    e,
+                )
+        return self._space_name_to_key.get(space_name)
 
 
 if TYPE_CHECKING:
@@ -130,15 +182,40 @@ def run_import(
         for entry in space.pages.values()
     }
     attachments = _AttachmentDirectory(lock, client_factory)
+    resolvers: dict[str, ExternalSpaceResolver] = {}
+
+    def get_resolver(org_url: str) -> ExternalSpaceResolver:
+        if org_url not in resolvers:
+            resolvers[org_url] = ExternalSpaceResolver(client_factory, org_url, lock)
+        return resolvers[org_url]
 
     for candidate in plan.updates:
         try:
+            resolver = get_resolver(candidate.org_url)
+
+            def resolve_page(target_path: str, resolver: ExternalSpaceResolver = resolver) -> PageTarget | None:
+                # 1. Try local lockfile lookup first
+                target = page_targets.get(target_path)
+                if target is not None:
+                    return target
+
+                # 2. Try resolving external space key from directory name
+                parts = [p for p in target_path.split("/") if p]
+                if len(parts) >= 2 and target_path.endswith(".md"):
+                    space_name = parts[0]
+                    space_key = resolver.get_space_key(space_name)
+                    if space_key:
+                        filename = parts[-1].removesuffix(".md")
+                        title = filename.replace("_ ", ": ").replace("_", ":")
+                        return PageTarget(title=title, space_key=space_key)
+                return None
+
             updated = _import_page(
                 root,
                 candidate,
                 state,
                 outcome,
-                page_targets=page_targets,
+                resolve_page=resolve_page,
                 attachments=attachments,
                 client_factory=client_factory,
                 dry_run=dry_run,
@@ -161,7 +238,7 @@ def _import_page(
     state: ImportState,
     outcome: ImportOutcome,
     *,
-    page_targets: dict[str, PageTarget],
+    resolve_page: PageResolver,
     attachments: _AttachmentDirectory,
     client_factory: ClientFactory,
     dry_run: bool,
@@ -189,7 +266,7 @@ def _import_page(
     result = convert_markdown(
         content_bytes.decode("utf-8"),
         export_path=candidate.export_path,
-        resolve_page=page_targets.get,
+        resolve_page=resolve_page,
         resolve_attachment=attachments.resolve,
         strip_title=strip_title,
         strip_breadcrumbs=strip_breadcrumbs,

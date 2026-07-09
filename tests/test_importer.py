@@ -148,3 +148,40 @@ class TestFailures:
         assert len(outcome.failed) == 1
         assert outcome.failed[0].export_path == "Space/Home/Systems.md"
         assert outcome.updated == ["Space/Home/Topics.md"]
+
+
+class TestExternalLinkResolution:
+    def test_resolves_external_link_via_api(self, export_root, confluence):
+        state = prepare(export_root, "# Systems\n\nSee [policy](../../Other%20Space/Home/Doc.md).\n")
+        # Mock get_all_spaces to return the external space mapping
+        confluence.get_all_spaces.return_value = {"results": [{"key": "OTH", "name": "Other Space"}]}
+
+        do_import(export_root, state, confluence)
+
+        body = confluence.update_page.call_args.kwargs["body"]
+        assert '<ri:page ri:content-title="Doc"' in body
+        assert 'ri:space-key="OTH"' in body
+        confluence.get_all_spaces.assert_called_once()
+
+    def test_pre_populated_from_lockfile(self, export_root, confluence):
+        # The lockfile space is CRI, with directory name 'Space'
+        state = prepare(export_root, "# Systems\n\nSee [policy](../../Space/Home/Doc.md).\n")
+
+        do_import(export_root, state, confluence)
+
+        body = confluence.update_page.call_args.kwargs["body"]
+        assert '<ri:page ri:content-title="Doc"' in body
+        assert 'ri:space-key="CRI"' in body
+        # Should not need to call API since space was resolved from the lockfile
+        confluence.get_all_spaces.assert_not_called()
+
+    def test_unresolvable_space_falls_back_to_text_with_warning(self, export_root, confluence):
+        state = prepare(export_root, "# Systems\n\nSee [policy](../../Missing%20Space/Home/Doc.md).\n")
+        confluence.get_all_spaces.return_value = {"results": []}
+
+        outcome = do_import(export_root, state, confluence)
+
+        body = confluence.update_page.call_args.kwargs["body"]
+        assert "<ac:link>" not in body
+        assert "policy" in body
+        assert any("Missing Space" in w for w in outcome.warnings)
