@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "confluence-markdown-importer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Push locally edited markdown (exported with confluence-markdown-exporter) back to Confluence"
 keywords = ["confluence", "atlassian", "markdown", "import", "sync", "upload"]
 readme = "README.md"
