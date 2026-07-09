@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "confluence-markdown-importer"
+version = "0.1.0"
+description = "Push locally edited markdown (exported with confluence-markdown-exporter) back to Confluence"
+keywords = ["confluence", "atlassian", "markdown", "import", "sync", "upload"]
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Stanislav Deviatov" }]
+requires-python = ">=3.13"
+dependencies = [
+    "confluence-markdown-exporter>=5.2",
+    "typer",
+    "pydantic",
+    "markdown-it-py",
+    "mdit-py-plugins",
+    "lxml",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-mock",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "types-PyYAML",
+    "lxml-stubs",
+]
+
+[project.scripts]
+confluence-markdown-importer = "confluence_markdown_importer.main:main"
+cmi = "confluence_markdown_importer.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/confluence_markdown_importer"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "S",    # flake8-bandit
+    "RUF",  # Ruff-specific rules
+    "ANN",  # flake8-annotations
+    "C4",   # flake8-comprehensions
+    "PT",   # flake8-pytest-style
+    "T20",  # flake8-print
+    "DTZ",  # flake8-datetimez
+    "PIE",  # flake8-pie
+    "TRY",  # tryceratops
+    "PERF", # perflint
+    "FURB", # refurb
+    "LOG",  # flake8-logging
+]
+ignore = [
+    "TRY003", # long messages outside the exception class are fine for descriptive errors
+    "TRY300", # try/else for returns is less readable than direct return after try
+    "TRY301", # abstract raise to inner function is overly pedantic
+    "TRY400", # logging.error without traceback has legitimate uses
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "ANN001", "ANN003", "ANN201", "ANN202", "S105", "S106", "N803", "N806", "T20", "DTZ005"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["confluence_markdown_exporter.*", "atlassian.*", "mdit_py_plugins.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast isolated tests",
+    "integration: tests touching external systems",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = ["if TYPE_CHECKING:", "pragma: no cover"]
